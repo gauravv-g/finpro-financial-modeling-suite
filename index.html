@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>FinPro | Enterprise Financial Modeling</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://accounts.google.com/gsi/client" async defer></script>
+    <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;500;600;700&family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+      :root {
+        --color-primary: #0f172a; /* Slate 900 */
+        --color-accent: #d97706;  /* Amber 600 */
+        --color-bg: #f8fafc;      /* Slate 50 */
+      }
+      body { 
+        font-family: 'Inter', sans-serif; 
+        background-color: var(--color-bg);
+        color: #1e293b;
+        -webkit-font-smoothing: antialiased;
+      }
+      h1, h2, h3, h4, h5, h6 { font-family: 'Playfair Display', serif; }
+      
+      /* Elegant Scrollbar */
+      ::-webkit-scrollbar { width: 6px; height: 6px; }
+      ::-webkit-scrollbar-track { background: transparent; }
+      ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 3px; }
+      ::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+
+      /* Print Optimization */
+      @media print {
+        @page { margin: 0; size: A4; }
+        body { background: white; -webkit-print-color-adjust: exact; }
+        .no-print { display: none !important; }
+        .a4-page { 
+            height: 297mm; 
+            width: 210mm; 
+            overflow: hidden; 
+            page-break-after: always; 
+            background: white;
+            padding: 15mm;
+            display: flex;
+            flex-direction: column;
+            border: none !important;
+            box-shadow: none !important;
+            margin: 0 !important;
+        }
+        .recharts-responsive-container { width: 100% !important; height: 300px !important; }
+      }
+
+      /* Screen Paper Effect */
+      @media screen {
+        .a4-page {
+            width: 210mm;
+            min-height: 297mm;
+            background: white;
+            margin: 2rem auto;
+            padding: 20mm;
+            box-shadow: 0 20px 25px -5px rgb(0 0 0 / 0.1), 0 8px 10px -6px rgb(0 0 0 / 0.1);
+            display: flex;
+            flex-direction: column;
+            border: 1px solid #e2e8f0;
+        }
+      }
+
+      .animate-fade-in { animation: fadeIn 0.6s ease-out forwards; }
+      .animate-slide-up { animation: slideUp 0.5s ease-out forwards; }
+      
+      @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+      @keyframes slideUp { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
+      
+      /* Quiet Luxury Inputs */
+      .input-premium {
+        transition: all 0.2s;
+      }
+      .input-premium:focus {
+        border-color: #d97706;
+        box-shadow: 0 0 0 1px #d97706, 0 4px 6px -1px rgb(0 0 0 / 0.1);
+      }
+    </style>
+  <script type="importmap">
+{
+  "imports": {
+    "react": "https://aistudiocdn.com/react@^19.2.1",
+    "react-dom/": "https://aistudiocdn.com/react-dom@^19.2.1/",
+    "react/": "https://aistudiocdn.com/react@^19.2.1/",
+    "@google/genai": "https://aistudiocdn.com/@google/genai@^1.31.0",
+    "lucide-react": "https://aistudiocdn.com/lucide-react@^0.555.0",
+    "recharts": "https://aistudiocdn.com/recharts@^3.5.1",
+    "xlsx": "https://aistudiocdn.com/xlsx@^0.18.5"
+  }
+}
+</script>
+</head>
+  <body class="antialiased">
+    <div id="root"></div>
+  </body>
+</html>
