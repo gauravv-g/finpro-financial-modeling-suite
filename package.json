@@ -1,7 +1,9 @@
 {
-  "name": "finpro",
-  "private": true,
+  "name": "finpro-financial-modeling-suite",
+  "type": "module",
   "version": "0.0.0",
+  ...
+}
   "type": "module",
   "scripts": {
     "dev": "vite",
