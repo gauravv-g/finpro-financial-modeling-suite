@@ -1,0 +1,7 @@
+name = "finpro-secure-backend"
+main = "worker.js"
+compatibility_date = "2024-12-05"
+
+# CORS headers are handled in the code, but you can enforce them here if needed.
+# [vars]
+# ALLOWED_ORIGIN = "*"

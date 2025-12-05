@@ -1,4 +1,3 @@
-
 // Google Drive Sync Engine
 // Handles Authenticating, Finding the Vault file, Downloading, and Uploading.
 
@@ -8,12 +7,11 @@ const SCOPE = "https://www.googleapis.com/auth/drive.appdata";
 // 1. Authentication
 export const authenticateWithGoogle = (): Promise<string> => {
     return new Promise((resolve, reject) => {
-        const clientId = process.env.REACT_APP_GOOGLE_CLIENT_ID || 'YOUR_CLIENT_ID_PLACEHOLDER';
+        const clientId = process.env.REACT_APP_GOOGLE_CLIENT_ID || '';
         
-        // CHECK FOR PLACEHOLDER: Enter Simulation Mode immediately to avoid OAuth Error
-        if (clientId === 'YOUR_CLIENT_ID_PLACEHOLDER') {
-            console.warn("No valid Google Client ID found. Entering Simulation Mode.");
-            // Simulate a short delay like a real network request
+        // CHECK FOR MISSING ID: Enter Simulation Mode to avoid OAuth Error
+        if (!clientId) {
+            console.warn("Google Client ID environment variable not set. Entering Simulation Mode.");
             setTimeout(() => {
                 resolve("SIMULATED_TOKEN"); 
             }, 800);
