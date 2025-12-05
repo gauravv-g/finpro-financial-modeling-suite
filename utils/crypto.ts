@@ -1,3 +1,4 @@
+
 // Native Browser Crypto API (SubtleCrypto) implementation for AES-GCM
 // This requires NO external libraries and runs entirely in the browser.
 
@@ -16,13 +17,17 @@ const getKeyMaterial = (password: string) => {
 };
 
 const getKey = (keyMaterial: CryptoKey, salt: Uint8Array) => {
-  return window.crypto.subtle.deriveKey(
-    {
-      name: "PBKDF2", // FIX: Corrected algorithm name from "PBDF2"
-      salt: salt,
+  // DEFINITIVE FIX: Explicitly cast the 'salt' to BufferSource.
+  // This resolves the TS2769 error caused by type inference issues in the build environment.
+  const pbkdf2Params: Pbkdf2Params = {
+      name: "PBKDF2",
+      salt: salt as BufferSource,
       iterations: 100000, // High iteration count to slow down brute-force attacks
       hash: "SHA-256"
-    },
+  };
+
+  return window.crypto.subtle.deriveKey(
+    pbkdf2Params,
     keyMaterial,
     { name: "AES-GCM", length: 256 },
     true,

@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, createContext, useContext, useRef } from 'react';
 import { Lock, Unlock, ShieldCheck, KeyRound, AlertTriangle, Fingerprint, Cloud, RefreshCw, Key, Database, LogOut } from 'lucide-react';
 import { encryptData, decryptData, hashPassword, exportRecoveryKey } from '../utils/crypto';
@@ -22,7 +21,6 @@ export const useSecurity = () => {
   return context;
 };
 
-// AUTO-LOCK TIMEOUT (15 Minutes)
 const IDLE_TIMEOUT_MS = 15 * 60 * 1000; 
 
 export const SecurityVault: React.FC<{ children: React.ReactNode }> = ({ children }) => {
@@ -34,14 +32,12 @@ export const SecurityVault: React.FC<{ children: React.ReactNode }> = ({ childre
   const [passphrase, setPassphrase] = useState('');
   const [inputPass, setInputPass] = useState('');
   
-  const [mode, setMode] = useState<'LOGIN' | 'SETUP'>('LOGIN');
+  const [mode, setMode] = useState<'LOGIN' | 'SETUP' | 'CONNECT'>('CONNECT');
   const [status, setStatus] = useState('');
   const [error, setError] = useState('');
   
-  // Idle Timer
   const lastActivityRef = useRef<number>(Date.now());
 
-  // Activity Listener for Auto-Lock
   useEffect(() => {
     if (!isAuthenticated) return;
 
@@ -53,7 +49,7 @@ export const SecurityVault: React.FC<{ children: React.ReactNode }> = ({ childre
         if (Date.now() - lastActivityRef.current > IDLE_TIMEOUT_MS) {
             logout("Session timed out due to inactivity.");
         }
-    }, 30000); // Check every 30s
+    }, 30000);
 
     window.addEventListener('mousemove', resetTimer);
     window.addEventListener('keydown', resetTimer);
@@ -67,9 +63,9 @@ export const SecurityVault: React.FC<{ children: React.ReactNode }> = ({ childre
     };
   }, [isAuthenticated]);
 
-  // Connect to Google First
   const handleConnectGoogle = async () => {
       setStatus("Connecting to Google Drive...");
+      setError('');
       try {
           const token = await authenticateWithGoogle();
           setAuthToken(token);
@@ -80,14 +76,15 @@ export const SecurityVault: React.FC<{ children: React.ReactNode }> = ({ childre
           
           if (fileId) {
               setDriveFileId(fileId);
-              setMode('LOGIN'); // Found file, user must login
+              setMode('LOGIN');
               setStatus("Vault found. Enter password to decrypt.");
           } else {
-              setMode('SETUP'); // No file, user must create
+              setMode('SETUP');
               setStatus("No vault found. Create a Master Password.");
           }
       } catch (e: any) {
-          setError("Connection Failed: " + e.message);
+          setError("Connection Failed: " + (e.message || 'Could not authenticate. Check popup blockers.'));
+          setStatus('');
       }
   };
 
@@ -99,12 +96,11 @@ export const SecurityVault: React.FC<{ children: React.ReactNode }> = ({ childre
     }
     
     setStatus("Initializing new Vault...");
+    setError('');
     try {
-        // Create an empty vault structure
         const initialData = JSON.stringify({ finstruct_reports_history: [] });
         const encrypted = await encryptData(initialData, inputPass);
         
-        // Upload to Drive
         if (authToken) {
             const newId = await uploadVault(encrypted, authToken);
             setDriveFileId(newId);
@@ -121,22 +117,22 @@ export const SecurityVault: React.FC<{ children: React.ReactNode }> = ({ childre
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setStatus("Downloading and Decrypting...");
+    setError('');
     
     try {
         if (!authToken || !driveFileId) throw new Error("Drive disconnected");
         
-        // 1. Download
         const encryptedContent = await downloadVault(driveFileId, authToken);
-        
-        // 2. Try Decrypt (Test with dummy check or just load)
-        await decryptData(encryptedContent, inputPass);
-        
-        // If successful:
+        if (!encryptedContent) { // Handle empty vault file
+            setMode('SETUP');
+            setStatus("Vault is empty. Please set up a new password.");
+            return;
+        }
+
+        const data = await decryptData(encryptedContent, inputPass);
         setPassphrase(inputPass);
         setIsAuthenticated(true);
         
-        // Load data into Memory (simulated LocalStorage)
-        const data = await decryptData(encryptedContent, inputPass);
         if (data) {
             const parsed = JSON.parse(data);
             Object.keys(parsed).forEach(k => {
@@ -157,23 +153,19 @@ export const SecurityVault: React.FC<{ children: React.ReactNode }> = ({ childre
     setPassphrase('');
     setIsAuthenticated(false);
     setInputPass('');
-    // SECURE WIPE: Remove all data from memory/storage on logout
     localStorage.removeItem('finstruct_reports_history');
     localStorage.removeItem('finstruct_ca_details');
     if (reason) alert(reason);
   };
 
   const encryptAndSave = async (key: string, data: any) => {
-    // 1. Save to Local Memory/Storage
     localStorage.setItem(key, JSON.stringify(data));
-    // 2. Trigger Cloud Sync
     await saveToCloud();
   };
   
   const saveToCloud = async () => {
       if (!authToken || !passphrase) return;
       
-      // Gather all relevant keys
       const allData = {
           finstruct_reports_history: JSON.parse(localStorage.getItem('finstruct_reports_history') || '[]'),
           finstruct_ca_details: JSON.parse(localStorage.getItem('finstruct_ca_details') || 'null')
@@ -182,7 +174,6 @@ export const SecurityVault: React.FC<{ children: React.ReactNode }> = ({ childre
       const jsonStr = JSON.stringify(allData);
       const encrypted = await encryptData(jsonStr, passphrase);
       
-      // Upload
       await uploadVault(encrypted, authToken, driveFileId || undefined);
   };
 
@@ -208,17 +199,17 @@ export const SecurityVault: React.FC<{ children: React.ReactNode }> = ({ childre
                <Cloud className={isCloudConnected ? "text-emerald-500" : "text-slate-500"} size={32} />
              </div>
              <h1 className="text-2xl font-serif font-bold text-white mb-2">
-               FinStruct Cloud Vault
+               FinPro Cloud Vault
              </h1>
              <p className="text-slate-400 text-sm">
-               {!isCloudConnected 
+               {mode === 'CONNECT'
                  ? 'Connect your Google Drive to access your secure financial vault.' 
                  : mode === 'SETUP' ? 'Create a Master Password to encrypt your vault.' 
                  : 'Enter Master Password to decrypt your vault.'}
              </p>
           </div>
 
-          {!isCloudConnected ? (
+          {mode === 'CONNECT' ? (
               <button 
                 onClick={handleConnectGoogle}
                 className="w-full py-3 rounded-lg font-bold text-slate-900 bg-white hover:bg-slate-100 transition flex items-center justify-center gap-2"
@@ -240,18 +231,6 @@ export const SecurityVault: React.FC<{ children: React.ReactNode }> = ({ childre
                   <Fingerprint className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500" size={18} />
                 </div>
 
-                {status && (
-                    <div className="text-center text-xs text-amber-500 animate-pulse flex justify-center gap-2">
-                        <RefreshCw size={12} className="animate-spin" /> {status}
-                    </div>
-                )}
-
-                {error && (
-                  <div className="bg-red-500/10 border border-red-500/50 text-red-400 p-3 rounded text-xs flex items-center gap-2">
-                    <AlertTriangle size={14} /> {error}
-                  </div>
-                )}
-
                 <button 
                   type="submit"
                   className={`w-full py-3 rounded-lg font-bold text-slate-900 transition flex items-center justify-center gap-2 ${mode === 'SETUP' ? 'bg-amber-500 hover:bg-amber-600' : 'bg-emerald-500 hover:bg-emerald-600'}`}
@@ -260,6 +239,18 @@ export const SecurityVault: React.FC<{ children: React.ReactNode }> = ({ childre
                   {mode === 'SETUP' ? 'Initialize & Encrypt' : 'Decrypt & Sync'}
                 </button>
               </form>
+          )}
+
+          {status && (
+              <div className="text-center text-xs text-amber-500 animate-pulse flex justify-center gap-2 mt-4">
+                  <RefreshCw size={12} className="animate-spin" /> {status}
+              </div>
+          )}
+
+          {error && (
+            <div className="bg-red-500/10 border border-red-500/50 text-red-400 p-3 rounded text-xs flex items-center gap-2 mt-4">
+              <AlertTriangle size={14} /> {error}
+            </div>
           )}
           
           <div className="mt-6 text-center border-t border-slate-800 pt-4">
@@ -280,7 +271,6 @@ export const SecurityVault: React.FC<{ children: React.ReactNode }> = ({ childre
   return (
     <SecurityContext.Provider value={{ isAuthenticated, isCloudConnected, passphrase, encryptAndSave, loadAndDecrypt, logout, saveToCloud }}>
       {children}
-      {/* Footer Status Bar for Sync */}
       <div className="fixed bottom-0 right-0 bg-slate-900 text-slate-500 text-[10px] px-3 py-1 rounded-tl-lg flex items-center gap-2 z-[100] opacity-50 hover:opacity-100 transition-opacity cursor-default">
           <Cloud size={10} className={isCloudConnected ? "text-green-500" : "text-red-500"} />
           {authToken === 'SIMULATED_TOKEN' ? "Demo Sync Active" : (isCloudConnected ? "Synced to Drive" : "Offline Mode")}

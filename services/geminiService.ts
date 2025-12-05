@@ -1,9 +1,17 @@
-import { GoogleGenAI, Schema, Type, HarmCategory, HarmBlockThreshold } from "@google/genai";
+import { GoogleGenAI, Type } from "@google/genai";
 import { BusinessData, ReportContent, YearProjection, FinancialMetrics, FinancialInputs, ReportMetadata, Language, AIConfig } from "../types";
 
 // ARCHITECTURE CONFIGURATION
-const USE_SECURE_BACKEND = !!process.env.REACT_APP_BACKEND_URL;
-const BACKEND_URL: string = process.env.REACT_APP_BACKEND_URL || "";
+// Paranoid-safe check for environment variables to prevent startup crashes.
+const getEnvVar = (name: string): string => {
+  if (typeof import.meta !== 'undefined' && (import.meta as any).env) {
+    return (import.meta as any).env[name] || "";
+  }
+  return "";
+};
+
+const BACKEND_URL: string = getEnvVar('VITE_APP_BACKEND_URL');
+const USE_SECURE_BACKEND = !!BACKEND_URL;
 
 // --- UNIVERSAL SYSTEM PROMPTS ---
 const SYSTEM_INSTRUCTION_FINANCIAL = `
@@ -26,7 +34,7 @@ NEGATIVE CONSTRAINTS (ABSOLUTE PROHIBITION):
 `;
 
 // --- SCHEMAS (Universal) ---
-const financialEstimatesSchema: Schema = {
+const financialEstimatesSchema = {
   type: Type.OBJECT,
   properties: {
     landCost: { type: Type.NUMBER },
@@ -44,7 +52,7 @@ const financialEstimatesSchema: Schema = {
   required: ["landCost", "buildingCost", "machineryCost", "workingCapitalCost", "otherCost", "projectCost", "ownContribution", "loanRequired", "year1Revenue", "revenueGrowthRate", "netMargin"]
 };
 
-const reportContentSchema: Schema = {
+const reportContentSchema = {
   type: Type.OBJECT,
   properties: {
     executiveSummary: { type: Type.STRING },
@@ -91,7 +99,7 @@ const getAIConfig = (): AIConfig => {
 };
 
 // --- BACKEND PROXY ADAPTER ---
-async function callSecureBackend(config: AIConfig, prompt: string, schema?: Schema): Promise<any> {
+async function callSecureBackend(config: AIConfig, prompt: string, schema?: object): Promise<any> {
     if (!BACKEND_URL) throw new Error("Backend URL is not configured.");
 
     const res = await fetch(BACKEND_URL, {
@@ -115,18 +123,20 @@ async function callSecureBackend(config: AIConfig, prompt: string, schema?: Sche
     }
     
     const data = await res.json();
-    // The backend worker normalizes the response to match Gemini's { text: "..." } format
-    return JSON.parse(data.text || "{}");
+    const textContent = data.candidates?.[0]?.content?.parts?.[0]?.text || data.text || "{}";
+    return JSON.parse(textContent);
 }
 
 
 // --- MAIN AI GATEWAY ---
-async function callAI(prompt: string, schema: Schema | undefined, taskType: string): Promise<{ data: any, meta: Partial<ReportMetadata> }> {
+async function callAI(prompt: string, schema: object | undefined, taskType: string): Promise<{ data: any, meta: Partial<ReportMetadata> }> {
     const startTime = Date.now();
     const config = getAIConfig();
     
     if (!config.apiKey && config.provider !== 'custom') {
-        throw new Error("API Key Missing. Configure Intelligence Hub.");
+        const err = new Error("API Key Missing. Configure Intelligence Hub.");
+        (err as any).code = 'NO_API_KEY';
+        throw err;
     }
 
     let resultData;
@@ -136,11 +146,10 @@ async function callAI(prompt: string, schema: Schema | undefined, taskType: stri
             resultData = await callSecureBackend(config, prompt, schema);
         } else {
             // Direct client-side calls (less secure, for local dev)
-            // This part of the code will not run if USE_SECURE_BACKEND is true.
             const ai = new GoogleGenAI({ apiKey: config.apiKey });
             const res = await ai.models.generateContent({
                 model: config.modelId,
-                contents: [{ role: 'user', parts: [{ text: prompt }] }],
+                contents: prompt,
                 config: { 
                     responseMimeType: "application/json",
                     responseSchema: schema,
@@ -161,7 +170,7 @@ async function callAI(prompt: string, schema: Schema | undefined, taskType: stri
                 attemptCount: 1,
                 generatedAt: new Date().toISOString(),
                 auditLog: {
-                    promptUsed: "REDACTED (Server-Side)", // Prompt is no longer visible on client
+                    promptUsed: USE_SECURE_BACKEND ? "REDACTED (Server-Side)" : prompt,
                     modelConfig: `${config.provider}/${config.modelId}`,
                     generationTimeMs: duration
                 }
@@ -175,18 +184,27 @@ async function callAI(prompt: string, schema: Schema | undefined, taskType: stri
 }
 
 // --- PUBLIC METHODS ---
-// These methods remain unchanged as they use the abstracted callAI gateway.
 
 export const enhanceBusinessField = async (label: string, roughInput: string, context: BusinessData): Promise<string> => {
-    const config = getAIConfig();
-    if(!config.apiKey && config.provider !== 'custom') return roughInput;
-    
-    const prompt = `Rewrite '${roughInput}' for a formal business report section '${label}'. Entity: ${context.entityName}. Professional tone only. JSON Output: {"text": "..."}`;
-    
     try {
+        const config = getAIConfig();
+        if(!config.apiKey && config.provider !== 'custom') {
+            const err = new Error("API Key Missing.");
+            (err as any).code = 'NO_API_KEY';
+            throw err;
+        }
+        
+        const prompt = `Rewrite '${roughInput}' for a formal business report section '${label}'. Entity: ${context.entityName}. Professional tone only. JSON Output: {"text": "..."}`;
+        
         const { data } = await callAI(prompt, undefined, 'ENHANCE');
         return data.text || roughInput;
-    } catch(e) { return roughInput; }
+    } catch(e) {
+        // Re-throw specific errors for the UI to catch
+        if ((e as any).code === 'NO_API_KEY') throw e;
+        // Otherwise, fail gracefully for this non-critical feature
+        console.error("Enhance field failed:", e);
+        return roughInput;
+    }
 };
 
 export const getFinancialEstimates = async (description: string, location: string): Promise<FinancialInputs> => {

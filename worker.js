@@ -90,7 +90,9 @@ async function callGemini(apiKey, userPrompt, modelId, schema) {
   const url = `https://generativelanguage.googleapis.com/v1beta/models/${modelId}:generateContent?key=${apiKey}`;
   const payload = {
     contents: [{ role: "user", parts: [{ text: userPrompt }] }],
-    systemInstruction: { role: "user", parts: [{ text: SYSTEM_INSTRUCTION_FINANCIAL }] },
+    // @google/genai guidelines: Removed confusing 'role' from systemInstruction.
+    // The role is ignored by the API in this context, but removing it improves clarity.
+    systemInstruction: { parts: [{ text: SYSTEM_INSTRUCTION_FINANCIAL }] },
     generationConfig: {
       temperature: 0.1,
       responseMimeType: "application/json",

@@ -3,7 +3,7 @@ import { FullReport, CADetails, UserMode, PlanType, SavedReport, RiskFlag, LoanR
 import { RevenueChart } from './FinancialCharts';
 import { assessFinancialRisks } from '../utils/financials';
 import { calculateLoanReadiness } from '../utils/loanReadiness';
-import { Printer, FileSpreadsheet, ShieldCheck, ArrowLeft, AlertTriangle, FileSignature, X, PieChart, Calculator, Eye, Edit2, Activity } from 'lucide-react';
+import { FileSpreadsheet, ShieldCheck, AlertTriangle, FileSignature, X, PieChart, Calculator, Eye, Edit2, Activity, Download } from 'lucide-react';
 import { generateCMAExcel } from '../utils/excelGenerator';
 import { CollaborationPanel } from './CollaborationPanel';
 import { LoanReadinessCheck } from './LoanReadinessCheck';
@@ -81,11 +81,12 @@ export const ReportView: React.FC<Props> = ({ report, onBack, userMode, plan, on
   const [showCollaboration, setShowCollaboration] = useState(false);
   const [risks, setRisks] = useState<RiskFlag[]>([]);
   const [readinessReport, setReadinessReport] = useState<LoanReadinessReport | null>(null);
+  const [isGeneratingPdf, setIsGeneratingPdf] = useState(false);
 
   useEffect(() => {
      setRisks(assessFinancialRisks(metrics, projections, data.financials));
      setReadinessReport(calculateLoanReadiness(data.financials, metrics, projections, breakEven));
-  }, []);
+  }, [report]);
 
   useEffect(() => {
     if (userMode === 'professional' && !caDetails) {
@@ -96,14 +97,38 @@ export const ReportView: React.FC<Props> = ({ report, onBack, userMode, plan, on
         setTimeout(() => setShowCAModal(true), 500);
       }
     }
-  }, [userMode]);
+  }, [userMode, data.location, caDetails]);
 
-  const handlePrint = () => {
+  const handleDownloadPDF = () => {
       if (plan === 'free') {
           onUpgrade(); 
           return;
       }
-      window.print();
+
+      setIsGeneratingPdf(true);
+      const element = document.getElementById('report-printable-content');
+      
+      if ((window as any).html2pdf && element) {
+          const opt = {
+            margin: 0,
+            filename: `${data.entityName.replace(/[^a-z0-9]/gi, '_')}_DPR.pdf`,
+            image: { type: 'jpeg', quality: 0.98 },
+            html2canvas: { scale: 2, useCORS: true, letterRendering: true },
+            jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' }
+          };
+
+          (window as any).html2pdf().set(opt).from(element).save().then(() => {
+              setIsGeneratingPdf(false);
+          }).catch((err: any) => {
+              console.error("PDF Generation Error", err);
+              setIsGeneratingPdf(false);
+              alert("PDF Generation failed. Please try the browser's print function (Ctrl/Cmd + P).");
+          });
+      } else {
+          console.error("html2pdf.js library not found. Falling back to window.print().");
+          window.print();
+          setIsGeneratingPdf(false);
+      }
   };
 
   const handleExportExcel = () => {
@@ -114,7 +139,8 @@ export const ReportView: React.FC<Props> = ({ report, onBack, userMode, plan, on
       try {
         generateCMAExcel(report);
       } catch (e) {
-          alert("Could not generate Excel.");
+          console.error("Excel Gen Error", e);
+          alert("Could not generate Excel file.");
       }
   };
 
@@ -171,14 +197,14 @@ export const ReportView: React.FC<Props> = ({ report, onBack, userMode, plan, on
   );
 
   const Page = ({ children, className, hideHeader, hideFooter }: { children?: React.ReactNode, className?: string, hideHeader?: boolean, hideFooter?: boolean }) => (
-    <div className={`a4-page ${className || ''} relative`}>
-       {!hideHeader && <SectionHeader />}
-       {!hideHeader && <VerifiedStamp />}
-       <div className="flex-grow flex flex-col relative z-10">
-           {children}
-       </div>
-       {!hideFooter && <Footer />}
-    </div>
+      <div className={`a4-page ${className || ''} relative`}>
+        {!hideHeader && <SectionHeader />}
+        {!hideHeader && <VerifiedStamp />}
+        <div className="flex-grow flex flex-col relative z-10">
+            {children}
+        </div>
+        {!hideFooter && <Footer />}
+      </div>
   );
 
   return (
@@ -256,15 +282,17 @@ export const ReportView: React.FC<Props> = ({ report, onBack, userMode, plan, on
                 {plan === 'pro' ? <FileSpreadsheet size={14} /> : <ShieldCheck size={14} />} Excel
             </button>
 
-            <button onClick={handlePrint} className={`flex items-center gap-2 font-bold px-3 py-2 rounded-lg transition text-xs shadow-lg ${plan === 'pro' ? 'bg-amber-500 hover:bg-amber-600 text-slate-900' : 'bg-slate-700 text-slate-400 cursor-not-allowed'}`}>
-                {plan === 'pro' ? <Printer size={14} /> : <ShieldCheck size={14} />} PDF
+            <button onClick={handleDownloadPDF} disabled={isGeneratingPdf} className={`flex items-center gap-2 font-bold px-3 py-2 rounded-lg transition text-xs shadow-lg ${plan === 'pro' ? 'bg-amber-500 hover:bg-amber-600 text-slate-900' : 'bg-slate-700 text-slate-400 cursor-not-allowed'}`}>
+                {plan === 'pro' ? (isGeneratingPdf ? 'Saving...' : <Download size={14} />) : <ShieldCheck size={14} />} 
+                {isGeneratingPdf ? '...' : 'PDF'}
             </button>
             </div>
         </div>
       </div>
-
-      <div className="print:w-full">
+      
+      <div id="report-printable-content">
         {viewMode === 'investor' ? (
+          <Page>
             <div className="max-w-[210mm] mx-auto p-12 bg-slate-900 text-white rounded-xl shadow-2xl border border-slate-800">
                  <div className="text-center mb-12 border-b border-slate-800 pb-8">
                     <h1 className="text-5xl font-serif font-bold text-amber-500 mb-3">{data.entityName}</h1>
@@ -292,6 +320,7 @@ export const ReportView: React.FC<Props> = ({ report, onBack, userMode, plan, on
                     <RevenueChart data={projections} />
                  </div>
             </div>
+            </Page>
         ) : (
             <>
               {/* COVER PAGE */}

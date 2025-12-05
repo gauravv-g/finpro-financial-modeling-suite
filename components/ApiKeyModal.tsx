@@ -21,7 +21,8 @@ const PROVIDERS = [
     getKeyUrl: 'https://aistudio.google.com/app/apikey',
     models: [
       { label: 'Gemini 2.5 Flash (Fast & Cheap)', value: 'gemini-2.5-flash' },
-      { label: 'Gemini 1.5 Pro (High Intelligence)', value: 'gemini-1.5-pro' }
+      // @google/genai guidelines: Replaced prohibited model 'gemini-1.5-pro' with 'gemini-3-pro-preview'.
+      { label: 'Gemini 3 Pro (High Intelligence)', value: 'gemini-3-pro-preview' }
     ]
   },
   { 

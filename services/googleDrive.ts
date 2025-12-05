@@ -4,10 +4,19 @@
 const VAULT_FILE_NAME = "finstruct_vault.enc";
 const SCOPE = "https://www.googleapis.com/auth/drive.appdata";
 
+// Paranoid-safe check for environment variables to prevent startup crashes.
+const getEnvVar = (name: string): string => {
+  if (typeof import.meta !== 'undefined' && (import.meta as any).env) {
+    return (import.meta as any).env[name] || "";
+  }
+  return "";
+};
+
+
 // 1. Authentication
 export const authenticateWithGoogle = (): Promise<string> => {
     return new Promise((resolve, reject) => {
-        const clientId = process.env.REACT_APP_GOOGLE_CLIENT_ID || '';
+        const clientId = getEnvVar('VITE_APP_GOOGLE_CLIENT_ID');
         
         // CHECK FOR MISSING ID: Enter Simulation Mode to avoid OAuth Error
         if (!clientId) {
@@ -19,6 +28,9 @@ export const authenticateWithGoogle = (): Promise<string> => {
         }
 
         try {
+            if (!(window as any).google || !(window as any).google.accounts) {
+                throw new Error("Google Identity Services script not loaded.");
+            }
             const client = (window as any).google.accounts.oauth2.initTokenClient({
                 client_id: clientId,
                 scope: SCOPE,
@@ -35,7 +47,7 @@ export const authenticateWithGoogle = (): Promise<string> => {
             client.requestAccessToken();
             
         } catch (e) {
-            console.error("Google Script error", e);
+            console.error("Google Script error or not loaded:", e);
             // Fallback to simulation if script fails
             resolve("SIMULATED_TOKEN");
         }
