@@ -1,13 +1,27 @@
+// Import for Node.js/Cloudflare Workers compatibility.
+import { TextEncoder, TextDecoder } from 'util';
 
-// Native Browser Crypto API (SubtleCrypto) implementation for AES-GCM
-// This requires NO external libraries and runs entirely in the browser.
+// --- Helper Functions for Environment Compatibility ---
+
+const subtleCrypto = crypto.subtle;
+
+const base64Encode = (bytes: Uint8Array): string => {
+  return Buffer.from(bytes).toString('base64');
+};
+
+const base64Decode = (str: string): Uint8Array => {
+  return new Uint8Array(Buffer.from(str, 'base64'));
+};
+
+
+// --- Main Crypto Logic ---
 
 const ENCODING = new TextEncoder();
 const DECODING = new TextDecoder();
 
 // 1. Generate a Key from the User's Password (PBKDF2)
 const getKeyMaterial = (password: string) => {
-  return window.crypto.subtle.importKey(
+  return subtleCrypto.importKey(
     "raw",
     ENCODING.encode(password),
     { name: "PBKDF2" },
@@ -17,52 +31,50 @@ const getKeyMaterial = (password: string) => {
 };
 
 const getKey = (keyMaterial: CryptoKey, salt: Uint8Array) => {
-  // DEFINITIVE FIX: Explicitly cast the 'salt' to BufferSource.
-  // This resolves the TS2769 error caused by type inference issues in the build environment.
   const pbkdf2Params: Pbkdf2Params = {
       name: "PBKDF2",
+      // FIX: Add a type assertion to satisfy the TypeScript compiler.
       salt: salt as BufferSource,
-      iterations: 100000, // High iteration count to slow down brute-force attacks
+      iterations: 100000,
       hash: "SHA-256"
   };
 
-  return window.crypto.subtle.deriveKey(
+  return subtleCrypto.deriveKey(
     pbkdf2Params,
     keyMaterial,
     { name: "AES-GCM", length: 256 },
     true,
-    ["encrypt", "decrypt", "wrapKey", "unwrapKey"]
+    ["encrypt", "decrypt"]
   );
 };
 
 // 2. Encrypt Data
 export const encryptData = async (data: any, password: string): Promise<string> => {
   try {
-    const salt = window.crypto.getRandomValues(new Uint8Array(16));
-    const iv = window.crypto.getRandomValues(new Uint8Array(12)); // Initialization Vector for AES-GCM
+    const salt = crypto.getRandomValues(new Uint8Array(16));
+    const iv = crypto.getRandomValues(new Uint8Array(12));
     const keyMaterial = await getKeyMaterial(password);
     const key = await getKey(keyMaterial, salt);
     
     const jsonString = JSON.stringify(data);
     const encodedData = ENCODING.encode(jsonString);
     
-    const encryptedContent = await window.crypto.subtle.encrypt(
+    const encryptedContent = await subtleCrypto.encrypt(
       {
         name: "AES-GCM",
-        iv: iv
+        // FIX: Add a type assertion to satisfy the TypeScript compiler.
+        iv: iv as BufferSource
       },
       key,
       encodedData
     );
 
-    // Combine Salt + IV + Ciphertext into a single buffer for storage
     const buffer = new Uint8Array(salt.byteLength + iv.byteLength + encryptedContent.byteLength);
     buffer.set(salt, 0);
     buffer.set(iv, salt.byteLength);
     buffer.set(new Uint8Array(encryptedContent), salt.byteLength + iv.byteLength);
 
-    // Convert to Base64 for LocalStorage
-    return btoa(String.fromCharCode(...buffer));
+    return base64Encode(buffer);
   } catch (e) {
     console.error("Encryption Failed", e);
     throw new Error("Could not encrypt data.");
@@ -72,13 +84,8 @@ export const encryptData = async (data: any, password: string): Promise<string> 
 // 3. Decrypt Data
 export const decryptData = async (ciphertextBase64: string, password: string): Promise<any> => {
   try {
-    const binaryString = atob(ciphertextBase64);
-    const buffer = new Uint8Array(binaryString.length);
-    for (let i = 0; i < binaryString.length; i++) {
-      buffer[i] = binaryString.charCodeAt(i);
-    }
+    const buffer = base64Decode(ciphertextBase64);
 
-    // Extract Salt (16 bytes) and IV (12 bytes)
     const salt = buffer.slice(0, 16);
     const iv = buffer.slice(16, 28);
     const data = buffer.slice(28);
@@ -86,13 +93,15 @@ export const decryptData = async (ciphertextBase64: string, password: string): P
     const keyMaterial = await getKeyMaterial(password);
     const key = await getKey(keyMaterial, salt);
 
-    const decryptedContent = await window.crypto.subtle.decrypt(
+    const decryptedContent = await subtleCrypto.decrypt(
       {
         name: "AES-GCM",
-        iv: iv
+        // FIX: Add a type assertion to satisfy the TypeScript compiler.
+        iv: iv as BufferSource
       },
       key,
-      data
+      // FIX: Add a type assertion for the data buffer as well.
+      data as BufferSource
     );
 
     const decodedString = DECODING.decode(decryptedContent);
@@ -103,15 +112,26 @@ export const decryptData = async (ciphertextBase64: string, password: string): P
   }
 };
 
-// 4. Hash Password (for verification without storing the actual password)
+// 4. Hash Password
 export const hashPassword = async (password: string): Promise<string> => {
   const msgUint8 = ENCODING.encode(password);
-  const hashBuffer = await window.crypto.subtle.digest('SHA-256', msgUint8);
-  const hashArray = Array.from(new Uint8Array(hashBuffer));
-  return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+  const hashBuffer = await subtleCrypto.digest('SHA-256', msgUint8);
+  return Buffer.from(hashBuffer).toString('base64');
 };
 
 // 5. Export Raw Key (Recovery Code)
 export const exportRecoveryKey = async (password: string): Promise<string> => {
-    return btoa(await hashPassword(password + "_RECOVERY_SALT")); 
+    const recoverySalt = ENCODING.encode("_RECOVERY_SALT");
+    const keyMaterial = await getKeyMaterial(password);
+    const recoveryKeyBuffer = await subtleCrypto.deriveBits(
+        {
+            name: "PBKDF2",
+            salt: recoverySalt as BufferSource, // FIX: Add type assertion here too.
+            iterations: 100000,
+            hash: "SHA-256"
+        },
+        keyMaterial,
+        256
+    );
+    return Buffer.from(recoveryKeyBuffer).toString('base64');
 };
