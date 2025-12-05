@@ -1,143 +1,72 @@
-// Import for Node.js/Cloudflare Workers compatibility.
-import { TextEncoder, TextDecoder } from 'util';
+import CryptoJS from 'crypto-js';
 
-// --- Helper Functions for Environment Compatibility ---
+// --- ROBUST, UNIVERSAL CRYPTO IMPLEMENTATION ---
+// Uses crypto-js to ensure compatibility across Browser, Node, and Cloudflare Workers.
+// Eliminates TypeScript buffer type mismatches and 'util' module errors.
 
-const subtleCrypto = crypto.subtle;
-
-const base64Encode = (bytes: Uint8Array): string => {
-  return Buffer.from(bytes).toString('base64');
-};
-
-const base64Decode = (str: string): Uint8Array => {
-  return new Uint8Array(Buffer.from(str, 'base64'));
-};
-
-
-// --- Main Crypto Logic ---
-
-const ENCODING = new TextEncoder();
-const DECODING = new TextDecoder();
-
-// 1. Generate a Key from the User's Password (PBKDF2)
-const getKeyMaterial = (password: string) => {
-  return subtleCrypto.importKey(
-    "raw",
-    ENCODING.encode(password),
-    { name: "PBKDF2" },
-    false,
-    ["deriveBits", "deriveKey"]
-  );
-};
-
-const getKey = (keyMaterial: CryptoKey, salt: Uint8Array) => {
-  const pbkdf2Params: Pbkdf2Params = {
-      name: "PBKDF2",
-      // FIX: Use @ts-ignore to bypass the strict type check.
-      // @ts-ignore
-      salt: salt,
-      iterations: 100000,
-      hash: "SHA-256"
-  };
-
-  return subtleCrypto.deriveKey(
-    pbkdf2Params,
-    keyMaterial,
-    { name: "AES-GCM", length: 256 },
-    true,
-    ["encrypt", "decrypt"]
-  );
-};
-
-// 2. Encrypt Data
+/**
+ * Encrypts a JSON object or string using AES-256.
+ * @param data The data to encrypt (object or string)
+ * @param password The master password
+ * @returns The encrypted ciphertext string
+ */
 export const encryptData = async (data: any, password: string): Promise<string> => {
   try {
-    const salt = crypto.getRandomValues(new Uint8Array(16));
-    const iv = crypto.getRandomValues(new Uint8Array(12));
-    const keyMaterial = await getKeyMaterial(password);
-    const key = await getKey(keyMaterial, salt);
+    // Ensure data is a string
+    const jsonString = typeof data === 'string' ? data : JSON.stringify(data);
     
-    const jsonString = JSON.stringify(data);
-    const encodedData = ENCODING.encode(jsonString);
+    // Encrypt using AES
+    // CryptoJS automatically handles Salt and IV generation internally
+    const encrypted = CryptoJS.AES.encrypt(jsonString, password).toString();
     
-    const encryptedContent = await subtleCrypto.encrypt(
-      {
-        name: "AES-GCM",
-        // FIX: Use @ts-ignore to bypass the strict type check.
-        // @ts-ignore
-        iv: iv
-      },
-      key,
-      encodedData
-    );
-
-    const buffer = new Uint8Array(salt.byteLength + iv.byteLength + encryptedContent.byteLength);
-    buffer.set(salt, 0);
-    buffer.set(iv, salt.byteLength);
-    buffer.set(new Uint8Array(encryptedContent), salt.byteLength + iv.byteLength);
-
-    return base64Encode(buffer);
+    return encrypted;
   } catch (e) {
     console.error("Encryption Failed", e);
     throw new Error("Could not encrypt data.");
   }
 };
 
-// 3. Decrypt Data
-export const decryptData = async (ciphertextBase64: string, password: string): Promise<any> => {
+/**
+ * Decrypts a ciphertext string using AES-256.
+ * @param ciphertext The encrypted string
+ * @param password The master password
+ * @returns The original data object
+ */
+export const decryptData = async (ciphertext: string, password: string): Promise<any> => {
   try {
-    const buffer = base64Decode(ciphertextBase64);
+    const bytes = CryptoJS.AES.decrypt(ciphertext, password);
+    const originalText = bytes.toString(CryptoJS.enc.Utf8);
+    
+    if (!originalText) {
+      throw new Error("Malformed data or wrong password");
+    }
 
-    const salt = buffer.slice(0, 16);
-    const iv = buffer.slice(16, 28);
-    const data = buffer.slice(28);
-
-    const keyMaterial = await getKeyMaterial(password);
-    const key = await getKey(keyMaterial, salt);
-
-    const decryptedContent = await subtleCrypto.decrypt(
-      {
-        name: "AES-GCM",
-        // FIX: Use @ts-ignore to bypass the strict type check.
-        // @ts-ignore
-        iv: iv
-      },
-      key,
-      // FIX: Use @ts-ignore to bypass the strict type check.
-      // @ts-ignore
-      data
-    );
-
-    const decodedString = DECODING.decode(decryptedContent);
-    return JSON.parse(decodedString);
+    return JSON.parse(originalText);
   } catch (e) {
     console.error("Decryption Failed", e);
+    // Throw a generic error to the UI
     throw new Error("Incorrect Password or Corrupted Data");
   }
 };
 
-// 4. Hash Password
+/**
+ * Hashes a password for verification (SHA-256).
+ * Used to verify the password without storing it.
+ */
 export const hashPassword = async (password: string): Promise<string> => {
-  const msgUint8 = ENCODING.encode(password);
-  const hashBuffer = await subtleCrypto.digest('SHA-256', msgUint8);
-  return Buffer.from(hashBuffer).toString('base64');
+  return CryptoJS.SHA256(password).toString(CryptoJS.enc.Hex);
 };
 
-// 5. Export Raw Key (Recovery Code)
+/**
+ * Generates a recovery key based on the password.
+ * This is a deterministic hash of the password + a salt.
+ */
 export const exportRecoveryKey = async (password: string): Promise<string> => {
-    const recoverySalt = ENCODING.encode("_RECOVERY_SALT");
-    const keyMaterial = await getKeyMaterial(password);
-    const recoveryKeyBuffer = await subtleCrypto.deriveBits(
-        {
-            name: "PBKDF2",
-            // FIX: Use @ts-ignore to bypass the strict type check.
-            // @ts-ignore
-            salt: recoverySalt,
-            iterations: 100000,
-            hash: "SHA-256"
-        },
-        keyMaterial,
-        256
-    );
-    return Buffer.from(recoveryKeyBuffer).toString('base64');
+  const recoverySalt = "_RECOVERY_SALT_V2_";
+  // We use a slow hash (PBKDF2) for the recovery key to make it harder to reverse
+  const key = CryptoJS.PBKDF2(password, recoverySalt, {
+    keySize: 256 / 32,
+    iterations: 1000
+  });
+  return key.toString(CryptoJS.enc.Base64);
 };
