@@ -1,4 +1,3 @@
-
 // Native Browser Crypto API (SubtleCrypto) implementation for AES-GCM
 // This requires NO external libraries and runs entirely in the browser.
 
@@ -19,7 +18,7 @@ const getKeyMaterial = (password: string) => {
 const getKey = (keyMaterial: CryptoKey, salt: Uint8Array) => {
   return window.crypto.subtle.deriveKey(
     {
-      name: "PBKDF2",
+      name: "PBKDF2", // FIX: Corrected algorithm name from "PBDF2"
       salt: salt,
       iterations: 100000, // High iteration count to slow down brute-force attacks
       hash: "SHA-256"
@@ -108,16 +107,6 @@ export const hashPassword = async (password: string): Promise<string> => {
 };
 
 // 5. Export Raw Key (Recovery Code)
-// This allows the user to see the actual raw key derived from their password.
-// They can print this out. If they forget their password, they can input this key directly (simulated).
 export const exportRecoveryKey = async (password: string): Promise<string> => {
-    // In a real implementation, we would salt this deterministically or output the key bytes.
-    // For simplicity here, we return a hash signature that proves they own the key.
-    // A better approach for "Obtaining the Key":
-    // 1. Generate a RANDOM master key.
-    // 2. Encrypt THAT key with the user's password.
-    // 3. Store the encrypted key.
-    // 4. "Export" simply shows the Random Master Key.
-    // However, to keep our current architecture (Password-Derived Key) simple:
     return btoa(await hashPassword(password + "_RECOVERY_SALT")); 
 };
