@@ -229,3 +229,38 @@ export interface Comment {
 export interface SavedReport {
   id: string;
   clientName: string;
+  projectCost: number;
+  date: string;
+  type: string;
+  status: string;
+  versions: ReportVersion[];
+  comments: Comment[];
+  collaborators: string[];
+  dataSnapshot?: BusinessData;
+}
+
+export interface ScenarioResult {
+  type: 'Base' | 'Optimistic' | 'Pessimistic';
+  inputs: FinancialInputs;
+  projections: YearProjection[];
+  metrics: FinancialMetrics;
+}
+
+export interface DiagnosticMetric {
+  name: string;
+  score: number;
+  maxScore: number;
+  status: 'Pass' | 'Warning' | 'Fail';
+  valueDisplay: string;
+  benchmark: string;
+  feedback: string;
+  fixAction?: string;
+}
+
+export interface LoanReadinessReport {
+  totalScore: number;
+  readinessStatus: 'Approved' | 'Borderline' | 'Rejected';
+  probability: number;
+  metrics: DiagnosticMetric[];
+  summary: string;
+}

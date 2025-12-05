@@ -9,11 +9,11 @@ import { LearningCenter } from './components/LearningCenter';
 import { SecurityVault, useSecurity } from './components/SecurityVault';
 import { ProjectManager } from './components/ProjectManager';
 import { LegalModal } from './components/LegalModal'; 
-import { ApiKeyModal } from './components/ApiKeyModal'; // Added Import
+import { ApiKeyModal } from './components/ApiKeyModal'; 
 import { generateReportContent } from './services/geminiService';
 import { calculateProjections, calculateMetrics, calculateAmortization, calculateWorkingCapital, calculateBreakEven } from './utils/financials';
 import { BusinessData, FullReport, UserMode, PlanType, SavedReport, AIConfig } from './types';
-import { BookOpen, LogOut, ShieldCheck, Crown, LayoutGrid, Library, Lock, Home, Settings } from 'lucide-react'; // Added Settings icon
+import { BookOpen, ShieldCheck, Crown, LayoutGrid, Library, Lock, Settings } from 'lucide-react'; 
 
 const APP_VERSION = "v2.5 (Enterprise)";
 
@@ -21,7 +21,7 @@ const APP_VERSION = "v2.5 (Enterprise)";
 const MainApp = ({ userMode, onExit }: { userMode: UserMode, onExit: () => void }) => {
     const [plan, setPlan] = useState<PlanType>('free');
     const [showPricing, setShowPricing] = useState(false);
-    const [showSettings, setShowSettings] = useState(false); // New State
+    const [showSettings, setShowSettings] = useState(false); 
     
     // Default view logic: CAs go to Dashboard, Business Owners go to Project Manager
     const [view, setView] = useState<'wizard' | 'report' | 'dashboard' | 'projects'>(
@@ -97,15 +97,18 @@ const MainApp = ({ userMode, onExit }: { userMode: UserMode, onExit: () => void 
     };
 
     const handleGoHome = () => {
-        const targetView = userMode === 'professional' ? 'dashboard' : 'projects';
-        if (view === targetView) return; // Already there
+        const destination = userMode === 'professional' ? 'dashboard' : 'projects';
         
+        // If currently editing data, warn the user
         if (view === 'wizard') {
-             if (confirm("Discard unsaved changes and return to dashboard?")) {
-                 setView(targetView);
+             if (confirm("Go to Dashboard? Unsaved progress in the wizard will be lost.")) {
+                 setView(destination);
+                 setReport(null); // Clear active report state
              }
         } else {
-             setView(targetView);
+             // Direct navigation
+             setView(destination);
+             if (view === 'report') setReport(null); // Clear report if leaving report view
         }
     };
 
@@ -188,7 +191,9 @@ const MainApp = ({ userMode, onExit }: { userMode: UserMode, onExit: () => void 
                      {!isDashboard && (
                          <div className="hidden md:flex items-center gap-2 text-sm">
                             <div className="h-4 w-px bg-slate-300"></div>
-                            <button onClick={handleGoHome} className="text-slate-500 hover:text-slate-900 font-medium transition-colors">Dashboard</button>
+                            <button onClick={handleGoHome} className="text-slate-500 hover:text-slate-900 font-medium transition-colors">
+                                {userMode === 'professional' ? 'Dashboard' : 'My Projects'}
+                            </button>
                             <span className="text-slate-300">/</span>
                             <span className="text-slate-900 font-semibold bg-slate-100 px-2 py-0.5 rounded text-xs uppercase tracking-wider">
                                 {view === 'wizard' ? 'New Project' : 'Report View'}
@@ -197,15 +202,27 @@ const MainApp = ({ userMode, onExit }: { userMode: UserMode, onExit: () => void 
                      )}
                  </div>
 
-                 <div className="flex items-center gap-3">
+                 <div className="flex items-center gap-2 sm:gap-3">
                     {/* PLAN BADGE */}
-                    <div className={`hidden sm:flex text-[10px] font-bold px-3 py-1.5 rounded-full items-center gap-1.5 uppercase tracking-wider cursor-pointer transition-colors ${plan === 'pro' ? 'bg-amber-50 text-amber-700 border border-amber-200 hover:bg-amber-100' : 'bg-slate-100 text-slate-500 border border-slate-200 hover:bg-slate-200'}`} onClick={() => setShowPricing(true)}>
+                    <div className={`hidden md:flex text-[10px] font-bold px-3 py-1.5 rounded-full items-center gap-1.5 uppercase tracking-wider cursor-pointer transition-colors ${plan === 'pro' ? 'bg-amber-50 text-amber-700 border border-amber-200 hover:bg-amber-100' : 'bg-slate-100 text-slate-500 border border-slate-200 hover:bg-slate-200'}`} onClick={() => setShowPricing(true)}>
                         {plan === 'pro' ? <Crown size={12} fill="currentColor" /> : <ShieldCheck size={12} />}
                         {plan === 'pro' ? 'Enterprise Plan' : 'Basic License'}
                     </div>
 
-                    <div className="h-6 w-px bg-slate-200 mx-2"></div>
+                    <div className="h-6 w-px bg-slate-200 mx-1 md:mx-2"></div>
                     
+                    {/* DASHBOARD NAV */}
+                    <button 
+                        onClick={handleGoHome} 
+                        className="flex items-center gap-2 px-3 py-2 text-slate-600 hover:text-slate-900 hover:bg-slate-100 rounded-lg transition" 
+                        title="Return to Dashboard"
+                    >
+                        {userMode === 'professional' ? <LayoutGrid size={20} /> : <Library size={20} />}
+                        <span className="hidden lg:inline text-xs font-bold uppercase tracking-wide">
+                            {userMode === 'professional' ? 'Dashboard' : 'Library'}
+                        </span>
+                    </button>
+
                     {/* AI SETTINGS */}
                     <button onClick={() => setShowSettings(true)} className="p-2 text-slate-500 hover:text-slate-900 hover:bg-slate-100 rounded-lg transition" title="AI Intelligence Hub">
                         <Settings size={20} />
@@ -215,15 +232,10 @@ const MainApp = ({ userMode, onExit }: { userMode: UserMode, onExit: () => void 
                     <button onClick={() => setShowLearning(true)} className="p-2 text-slate-500 hover:text-amber-600 hover:bg-amber-50 rounded-lg transition" title="Knowledge Center">
                         <BookOpen size={20} />
                     </button>
-                    
-                    {/* DASHBOARD NAV */}
-                    <button onClick={handleGoHome} className="p-2 text-slate-500 hover:text-slate-900 hover:bg-slate-100 rounded-lg transition" title="My Projects">
-                        {userMode === 'professional' ? <LayoutGrid size={20} /> : <Library size={20} />}
-                    </button>
 
                     {/* LOGOUT / LOCK */}
                     <button onClick={handleLockVault} className="bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold px-4 py-2 rounded-lg transition flex items-center gap-2 ml-2 shadow-md hover:shadow-lg transform active:scale-95">
-                        <Lock size={14} /> Lock Vault
+                        <Lock size={14} /> <span className="hidden sm:inline">Lock Vault</span>
                     </button>
                  </div>
               </div>
